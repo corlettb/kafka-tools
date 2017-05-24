@@ -57,7 +57,7 @@ class ActionMigrate(ActionModule):
         # TODO: Work in broker rack info to make sure replicas aren't assigned to the same racks
 
         for topic in self.cluster.topics:
-            if len(self.args.topics) > 0 and topic not in self.args.topics:
+            if self.args.topics != None and topic not in self.args.topics:
                 continue
             if topic in self.args.exclude_topics:
                 continue
