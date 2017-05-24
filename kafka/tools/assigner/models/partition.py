@@ -68,6 +68,15 @@ class Partition(BaseModel):
         broker.partitions[position].remove(self)
         self.replicas.remove(broker)
 
+    def remove_all_replicas(self):
+        my_list = []
+        for broker in self.replicas:
+            my_list.insert(0, broker)
+
+        for broker in my_list:
+            self.remove_replica(broker)
+        self.replicas = []
+
     # Remove one broker from the replica list and replace it at the same position with another
     # This just calls add_replica and remove_replica, but we do it a lot
     def swap_replicas(self, remove_broker, add_broker):
