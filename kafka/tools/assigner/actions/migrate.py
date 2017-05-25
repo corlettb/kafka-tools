@@ -53,27 +53,67 @@ class ActionMigrate(ActionModule):
         for x in str: hash += (ord(x))
         return(hash % siz) # Depending on the range, do a modulo operation.
 
-    def process_cluster(self):
+    def create_broker_deque(self, start_bias):
+
+        my_deque = deque(self.to_brokers)
+
+        for _ in range(0, start_bias):
+            proposed = my_deque.popleft()
+            my_deque.append(proposed)
+
+        return my_deque
+
+    def find_best_isr_broker(self, leader_broker, broker_count, start_bias):
+
+        brokers_deque = self.create_broker_deque(start_bias)
+
+        best_broker = None
+        lowest_tf_count = 99999999
+
         # TODO: Work in broker rack info to make sure replicas aren't assigned to the same racks
+        while len(brokers_deque)> 0:
+            proposed = brokers_deque.popleft()
+
+            if proposed == leader_broker.id:
+                # can't assign an isr to the leader
+                continue
+
+            if proposed not in broker_count:
+                broker_count[proposed] = 0
+
+            if broker_count[proposed] < lowest_tf_count:
+                best_broker = proposed
+                lowest_tf_count = broker_count[proposed]
+
+        broker_count[best_broker] = broker_count[best_broker] + 1
+        return best_broker
+
+    def process_cluster(self):
+
 
         for topic in self.cluster.topics:
+
             if self.args.topics != None and topic not in self.args.topics:
                 continue
             if topic in self.args.exclude_topics:
                 continue
-            leader_deque = deque(self.to_brokers)
-            todeque = deque(self.to_brokers)
 
             broker_start = self.hashval(topic, len(self.to_brokers))
-            for _ in range(0, broker_start):
-                proposed = leader_deque.popleft()
-                leader_deque.append(proposed)
-                proposed = todeque.popleft()
-                todeque.append(proposed)
-            proposed = todeque.popleft()
-            todeque.append(proposed)
 
             sorted_partitions = sorted(self.cluster.topics[topic].partitions, key=lambda k: k.num)
+
+            broker_count = {}
+            leader_deque = self.create_broker_deque(broker_start)
+            for paritition in sorted_partitions:
+                proposed = leader_deque.popleft()
+                leader_deque.append(proposed)
+
+                if proposed in broker_count:
+                    broker_count[proposed] = broker_count[proposed] + 1
+                else:
+                    broker_count[proposed] = 1
+
+            leader_deque = self.create_broker_deque(broker_start)
 
             for partition in sorted_partitions:
 
@@ -82,8 +122,6 @@ class ActionMigrate(ActionModule):
                 leader_broker = None
                 replica_count = len(partition.replicas)
                 partition.remove_all_replicas()
-
-                prepend_lender = None
 
                 for pos in range(0, replica_count):
                     proposed = None
@@ -94,17 +132,10 @@ class ActionMigrate(ActionModule):
                         proposed_broker = self.cluster.brokers[proposed]
                         leader_broker = proposed_broker
                     else:
-                        proposed = todeque.popleft()
-                        proposed_broker = self.cluster.brokers[proposed]
-                        if proposed_broker == leader_broker:
-                            prepend_lender = proposed
-                            proposed = todeque.popleft()
-                            proposed_broker = self.cluster.brokers[proposed]
 
-                        todeque.append(proposed)
+                        best_broker = self.find_best_isr_broker(leader_broker, broker_count, broker_start)
+                        proposed_broker = self.cluster.brokers[best_broker]
 
                     partition.add_replica(proposed_broker, pos)
                     first = False
 
-                if prepend_lender != None:
-                    todeque.appendleft(prepend_lender)
