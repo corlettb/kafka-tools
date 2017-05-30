@@ -42,7 +42,7 @@ class ActionMigrate(ActionModule):
     def _add_args(cls, parser):
         # should this be a main option?
         parser.add_argument('-t', '--topics', help="List of topics to include when performing actions", nargs='*')
-        parser.add_argument('-b', '--brokers', help="List of Broker IDs to remove", required=True, type=int, nargs='*')
+        parser.add_argument('-b', '--brokers', help="List of Broker IDs to remove", type=int, nargs='*', default=[])
         parser.add_argument('-tb', '--to_brokers', help="List of Broker IDs to move partitions to (defaults to whole cluster)",
                             required=False, type=int, nargs='*', default=[])
 
