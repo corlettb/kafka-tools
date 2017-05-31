@@ -43,6 +43,7 @@ class ActionMigrate(ActionModule):
         # should this be a main option?
         parser.add_argument('-t', '--topics', help="List of topics to include when performing actions", nargs='*')
         parser.add_argument('-b', '--brokers', help="List of Broker IDs to remove", type=int, nargs='*', default=[])
+        parser.add_argument('-r', '--replicas', help="Force a certain number of replicas", type=int, default=-1)
         parser.add_argument('-tb', '--to_brokers', help="List of Broker IDs to move partitions to (defaults to whole cluster)",
                             required=False, type=int, nargs='*', default=[])
 
@@ -120,7 +121,11 @@ class ActionMigrate(ActionModule):
                 first = True
 
                 leader_broker = None
-                replica_count = len(partition.replicas)
+                replica_count = None
+                if self.args.replicas == -1:
+                    replica_count = len(partition.replicas)
+                else:
+                    replica_count = self.args.replicas
                 partition.remove_all_replicas()
 
                 for pos in range(0, replica_count):
