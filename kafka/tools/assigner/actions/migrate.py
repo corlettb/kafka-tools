@@ -71,13 +71,19 @@ class ActionMigrate(ActionModule):
         best_broker = None
         lowest_tf_count = 99999999
 
-        # TODO: Work in broker rack info to make sure replicas aren't assigned to the same racks
         while len(brokers_deque)> 0:
             proposed = brokers_deque.popleft()
 
             if proposed == leader_broker.id:
                 # can't assign an isr to the leader
                 continue
+
+            # TODO: Add functionality to check if the replica count is higher than the number of racks
+            if leader_broker.rack != None:
+                # skip replicas in the same rack
+                proposed_broker = self.cluster.brokers[proposed]
+                if leader_broker.rack == proposed_broker.rack:
+                    continue
 
             if proposed not in broker_count:
                 broker_count[proposed] = 0
@@ -105,7 +111,7 @@ class ActionMigrate(ActionModule):
 
             broker_count = {}
             leader_deque = self.create_broker_deque(broker_start)
-            for paritition in sorted_partitions:
+            for partition in sorted_partitions:
                 proposed = leader_deque.popleft()
                 leader_deque.append(proposed)
 
@@ -137,7 +143,6 @@ class ActionMigrate(ActionModule):
                         proposed_broker = self.cluster.brokers[proposed]
                         leader_broker = proposed_broker
                     else:
-
                         best_broker = self.find_best_isr_broker(leader_broker, broker_count, broker_start)
                         proposed_broker = self.cluster.brokers[best_broker]
 
