@@ -64,12 +64,13 @@ class ActionMigrate(ActionModule):
 
         return my_deque
 
-    def find_best_isr_broker(self, leader_broker, broker_count, start_bias):
+    def find_best_isr_broker(self, leader_broker, rack_count, broker_count, start_bias):
 
         brokers_deque = self.create_broker_deque(start_bias)
 
         best_broker = None
         lowest_tf_count = 99999999
+        lowest_rack_count = 9999999
 
         while len(brokers_deque)> 0:
             proposed = brokers_deque.popleft()
@@ -78,21 +79,22 @@ class ActionMigrate(ActionModule):
                 # can't assign an isr to the leader
                 continue
 
-            # TODO: Add functionality to check if the replica count is higher than the number of racks
-            if leader_broker.rack != None:
-                # skip replicas in the same rack
-                proposed_broker = self.cluster.brokers[proposed]
-                if leader_broker.rack == proposed_broker.rack:
-                    continue
-
             if proposed not in broker_count:
                 broker_count[proposed] = 0
+
+            if self.cluster.brokers[proposed].rack not in rack_count:
+                rack_count[self.cluster.brokers[proposed].rack] = 0
 
             if broker_count[proposed] < lowest_tf_count:
                 best_broker = proposed
                 lowest_tf_count = broker_count[proposed]
 
+            if broker_count[proposed] == lowest_tf_count and rack_count[self.cluster.brokers[proposed].rack] < lowest_rack_count:
+                best_broker = proposed
+                lowest_tf_count = broker_count[proposed]
+
         broker_count[best_broker] = broker_count[best_broker] + 1
+        rack_count[self.cluster.brokers[best_broker].rack] + 1
         return best_broker
 
     def process_cluster(self):
@@ -110,10 +112,16 @@ class ActionMigrate(ActionModule):
             sorted_partitions = sorted(self.cluster.topics[topic].partitions, key=lambda k: k.num)
 
             broker_count = {}
+            rack_count = {}
             leader_deque = self.create_broker_deque(broker_start)
             for partition in sorted_partitions:
                 proposed = leader_deque.popleft()
                 leader_deque.append(proposed)
+
+                if self.cluster.brokers[proposed].rack in rack_count:
+                    rack_count[self.cluster.brokers[proposed].rack] = rack_count[self.cluster.brokers[proposed].rack] +1
+                else:
+                    rack_count[self.cluster.brokers[proposed].rack] = 1
 
                 if proposed in broker_count:
                     broker_count[proposed] = broker_count[proposed] + 1
@@ -143,7 +151,7 @@ class ActionMigrate(ActionModule):
                         proposed_broker = self.cluster.brokers[proposed]
                         leader_broker = proposed_broker
                     else:
-                        best_broker = self.find_best_isr_broker(leader_broker, broker_count, broker_start)
+                        best_broker = self.find_best_isr_broker(leader_broker, rack_count, broker_count, broker_start)
                         proposed_broker = self.cluster.brokers[best_broker]
 
                     partition.add_replica(proposed_broker, pos)
