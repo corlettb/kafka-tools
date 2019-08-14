@@ -75,9 +75,13 @@ class ActionMigrate(ActionModule):
         while len(brokers_deque)> 0:
             proposed = brokers_deque.popleft()
 
+            skip_broker = False
             for used_broker in used_brokers:
-                if proposed == used_broker:
+                if proposed == used_broker.id:
+                    skip_broker = True
                     continue
+            if skip_broker:
+                continue
 
             # TODO: Add functionality to check if the replica count is higher than the number of racks
             if leader_broker.rack != None and replica_count<=3:
